@@ -1,0 +1,33 @@
+# Builds ItemsToBags.dll using your copy of A Township Tale.
+#   .\build.ps1                                       game in C:\Games\Alta\A Township Tale
+#   .\build.ps1 -GamePath "D:\Games\A Township Tale"  game somewhere else
+#   .\build.ps1 -Install                              also copies it into Mods (close the game first)
+[CmdletBinding()]
+param(
+    [string]$GamePath = 'C:\Games\Alta\A Township Tale',
+    [switch]$Install
+)
+$ErrorActionPreference = 'Stop'
+
+$managed = Join-Path $GamePath 'A Township Tale_Data\Managed'
+$melon   = Join-Path $GamePath 'MelonLoader\net35'
+$csc     = 'C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe'
+$here    = Split-Path -Parent $MyInvocation.MyCommand.Path
+
+if (-not (Test-Path $managed)) { throw "Can't find the game at '$GamePath'. Pass -GamePath with the folder that holds 'A Township Tale.exe'." }
+if (-not (Test-Path $melon))   { throw "MelonLoader isn't installed in '$GamePath'." }
+if (-not (Test-Path $csc))     { throw "Can't find the C# compiler at $csc (.NET Framework 4.x)." }
+
+$refs = @(Get-ChildItem (Join-Path $managed '*.dll') | ForEach-Object { "/r:$($_.FullName)" })
+$refs += "/r:$(Join-Path $melon 'MelonLoader.dll')", "/r:$(Join-Path $melon '0Harmony.dll')"
+$src = @(Join-Path $here 'Main.cs') + @(Get-ChildItem (Join-Path $here 'Core'), (Join-Path $here 'Game') -Recurse -Filter '*.cs' | ForEach-Object { $_.FullName })
+$out = Join-Path $here 'ItemsToBags.dll'
+
+& $csc /nologo /warn:4 /warnaserror+ /target:library /nostdlib+ /noconfig "/out:$out" $refs $src
+if ($LASTEXITCODE -ne 0) { throw "Build failed." }
+Write-Host "Built $out"
+
+if ($Install) {
+    Copy-Item $out (Join-Path $GamePath 'Mods\ItemsToBags.dll') -Force
+    Write-Host "Copied to $(Join-Path $GamePath 'Mods')"
+}
